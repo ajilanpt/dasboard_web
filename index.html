@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NEXUS — Performance Intelligence</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    --bg-0: #0a0a0c;
+    --bg-1: #111114;
+    --bg-2: #16161a;
+    --bg-3: #1d1d22;
+    --line: rgba(255, 255, 255, 0.06);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --text-0: #f4f1ea;
+    --text-1: #b8b3a8;
+    --text-2: #6e6a62;
+    --gold: #d4a857;
+    --gold-soft: #e8c98a;
+    --crimson: #c9444a;
+    --emerald: #5fa37e;
+    --azure: #6fa3d2;
+    --plum: #9a6cb0;
+    --grain-opacity: 0.035;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-0);
+    color: var(--text-0);
+    overflow-x: hidden;
+    cursor: none;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+  }
+
+  /* ====== ANIMATED GRADIENT MESH BG ====== */
+  .mesh {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 800px 600px at 15% 20%, rgba(212, 168, 87, 0.12), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 85% 30%, rgba(154, 108, 176, 0.08), transparent 60%),
+      radial-gradient(ellipse 600px 800px at 50% 90%, rgba(95, 163, 126, 0.06), transparent 60%);
+    z-index: 0;
+    pointer-events: none;
+    animation: meshDrift 24s ease-in-out infinite alternate;
+  }
+  @keyframes meshDrift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(-30px, 20px) scale(1.05); }
+    100% { transform: translate(20px, -15px) scale(1); }
+  }
+
+  /* Film grain */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  /* ====== CUSTOM CURSOR ====== */
+  .cursor-dot, .cursor-ring {
+    position: fixed; top: 0; left: 0;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%, -50%);
+    will-change: transform;
+  }
+  .cursor-dot {
+    width: 6px; height: 6px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--gold);
+    transition: width 0.2s, height 0.2s, background 0.2s;
+  }
+  .cursor-ring {
+    width: 36px; height: 36px;
+    border: 1px solid rgba(212, 168, 87, 0.5);
+    border-radius: 50%;
+    transition: width 0.25s ease, height 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+  }
+  body.is-hovering .cursor-ring {
+    width: 70px; height: 70px;
+    border-color: var(--gold);
+    background: rgba(212, 168, 87, 0.06);
+  }
+  body.is-hovering .cursor-dot {
+    width: 0; height: 0;
+  }
+
+  /* ====== LAYOUT ====== */
+  .app {
+    position: relative; z-index: 2;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 36px 48px 80px;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 36px;
+  }
+  .brand {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .brand-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.35em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  .brand-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 56px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+  }
+  .brand-title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--gold);
+  }
+  .meta {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-2);
+    line-height: 1.8;
+  }
+  .meta .live {
+    color: var(--emerald);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pulse {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--emerald);
+    box-shadow: 0 0 8px var(--emerald);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* ====== FILTER BAR ====== */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 18px 24px;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+  .filter-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  .chip-group {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .chip {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text-1);
+    border-radius: 100px;
+    cursor: none;
+    transition: all 0.25s ease;
+    letter-spacing: 0.02em;
+  }
+  .chip:hover {
+    border-color: var(--gold-soft);
+    color: var(--text-0);
+  }
+  .chip.active {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: var(--bg-0);
+    font-weight: 600;
+    box-shadow: 0 0 24px rgba(212, 168, 87, 0.25);
+  }
+  .filter-divider {
+    width: 1px; height: 28px;
+    background: var(--line-strong);
+  }
+  .search-box {
+    flex: 1; min-width: 220px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    color: var(--text-0);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    outline: none;
+    cursor: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--gold); }
+  .search-box::before {
+    content: '⌕';
+    position: absolute; left: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-2);
+    font-size: 16px;
+  }
+  .reset {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    background: none;
+    border: none;
+    cursor: none;
+    padding: 8px 12px;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .reset:hover { color: var(--gold); }
+
+  /* ====== KPI ROW ====== */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    margin-bottom: 36px;
+  }
+  .kpi {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+  }
+  .kpi::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 80px; height: 80px;
+    background: radial-gradient(circle at top right, rgba(212, 168, 87, 0.08), transparent 70%);
+    pointer-events: none;
+  }
+  .kpi:hover {
+    transform: translateY(-3px);
+    border-color: var(--gold-soft);
+  }
+  .kpi-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--text-2);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .kpi-value {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text-0);
+  }
+  .kpi-value .unit {
+    font-size: 18px;
+    color: var(--text-2);
+    margin-left: 4px;
+  }
+  .kpi-trend {
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.05em;
+  }
+
+  /* ====== GRID ====== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 22px;
+  }
+  .panel {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px 28px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.4s ease, transform 0.4s ease;
+  }
+  .panel:hover {
+    border-color: rgba(212, 168, 87, 0.25);
+  }
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 22px;
+  }
+  .panel-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--text-0);
+  }
+  .panel-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .panel-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--gold);
+    border: 1px solid rgba(212, 168, 87, 0.3);
+    padding: 4px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.1em;
+  }
+  .chart-wrap {
+    position: relative;
+    height: 280px;
+  }
+  .chart-wrap.tall { height: 320px; }
+
+  /* spans */
+  .span-6 { grid-column: span 6; }
+  .span-4 { grid-column: span 4; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+
+  /* ====== TABLE ====== */
+  .table-wrap {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    text-transform: uppercase;
+    font-weight: 400;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  td {
+    padding: 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-1);
+    transition: background 0.2s;
+  }
+  tbody tr:hover td {
+    background: rgba(212, 168, 87, 0.04);
+    color: var(--text-0);
+  }
+  td.name {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    color: var(--text-0);
+    font-weight: 500;
+  }
+  td.score {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--gold);
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .badge.high   { background: rgba(95, 163, 126, 0.12); color: var(--emerald); border: 1px solid rgba(95, 163, 126, 0.25); }
+  .badge.medium { background: rgba(212, 168, 87, 0.12); color: var(--gold);    border: 1px solid rgba(212, 168, 87, 0.25); }
+  .badge.low    { background: rgba(201, 68, 74, 0.12);  color: var(--crimson); border: 1px solid rgba(201, 68, 74, 0.25); }
+
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 80px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+  .empty {
+    text-align: center; padding: 60px 0;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--text-2);
+    font-size: 18px;
+  }
+
+  /* Stagger entrance */
+  .panel, .kpi {
+    animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .kpi:nth-child(1) { animation-delay: 0.05s; }
+  .kpi:nth-child(2) { animation-delay: 0.10s; }
+  .kpi:nth-child(3) { animation-delay: 0.15s; }
+  .kpi:nth-child(4) { animation-delay: 0.20s; }
+  .panel:nth-child(1) { animation-delay: 0.30s; }
+  .panel:nth-child(2) { animation-delay: 0.38s; }
+  .panel:nth-child(3) { animation-delay: 0.46s; }
+  .panel:nth-child(4) { animation-delay: 0.54s; }
+  .panel:nth-child(5) { animation-delay: 0.62s; }
+  .panel:nth-child(6) { animation-delay: 0.70s; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .span-6, .span-4, .span-8 { grid-column: span 12; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .brand-title { font-size: 40px; }
+  }
+  @media (max-width: 600px) {
+    .app { padding: 24px 20px 60px; }
+    body { cursor: auto; }
+    .cursor-dot, .cursor-ring { display: none; }
+    .chip, .reset, .search-box input { cursor: pointer; }
+    header { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .meta { text-align: left; }
+    .kpi-row { grid-template-columns: 1fr; }
+  }
+
+  /* footer */
+  footer {
+    margin-top: 52px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+</style>
+</head>
+
+<body>
+  <div class="mesh"></div>
+  <div class="cursor-ring"></div>
+  <div class="cursor-dot"></div>
+
+  <div class="app">
+    <header>
+      <div class="brand">
+        <span class="brand-mark">N · X · S — Vol. 01</span>
+        <h1 class="brand-title">Performance <em>Intelligence.</em></h1>
+      </div>
+      <div class="meta">
+        <div><span class="live"><span class="pulse"></span> LIVE FEED</span></div>
+        <div id="lastSync">SYNC · —</div>
+        <div>SOURCE · GOOGLE SHEETS</div>
+      </div>
+    </header>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar" data-hover>
+      <span class="filter-label">Performance</span>
+      <div class="chip-group" id="perfFilter">
+        <button class="chip active" data-perf="all">All</button>
+        <button class="chip" data-perf="High">High</button>
+        <button class="chip" data-perf="Medium">Medium</button>
+        <button class="chip" data-perf="Low">Low</button>
+      </div>
+      <div class="filter-divider"></div>
+      <span class="filter-label">City</span>
+      <div class="chip-group" id="cityFilter">
+        <button class="chip active" data-city="all">All</button>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="Search by name…" />
+      </div>
+      <button class="reset" id="resetBtn">↺ Reset</button>
+    </div>
+
+    <!-- KPI ROW -->
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <!-- CHARTS GRID -->
+    <div class="grid">
+      <!-- 1. BAR -->
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Score Ledger</div>
+            <div class="panel-sub">Bar · Individual Performance</div>
+          </div>
+          <div class="panel-tag">01</div>
+        </div>
+        <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+      </div>
+
+      <!-- 2. RADAR -->
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Profile Radar</div>
+            <div class="panel-sub">Radar · Score & Age Composite</div>
+          </div>
+          <div class="panel-tag">02</div>
+        </div>
+        <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+
+      <!-- 3. DOUGHNUT -->
+      <div class="panel span-4" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Tier Split</div>
+            <div class="panel-sub">Doughnut · Performance Bands</div>
+          </div>
+          <div class="panel-tag">03</div>
+        </div>
+        <div class="chart-wrap"><canvas id="doughnutChart"></canvas></div>
+      </div>
+
+      <!-- 4. SCATTER (Bubble) -->
+      <div class="panel span-8" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Age × Score Map</div>
+            <div class="panel-sub">Bubble · Correlation Field</div>
+          </div>
+          <div class="panel-tag">04</div>
+        </div>
+        <div class="chart-wrap"><canvas id="bubbleChart"></canvas></div>
+      </div>
+
+      <!-- 5. POLAR AREA (City) -->
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Geographic Pulse</div>
+            <div class="panel-sub">Polar Area · Score by City</div>
+          </div>
+          <div class="panel-tag">05</div>
+        </div>
+        <div class="chart-wrap"><canvas id="polarChart"></canvas></div>
+      </div>
+
+      <!-- 6. TABLE -->
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Roster</div>
+            <div class="panel-sub">Filtered Records</div>
+          </div>
+          <div class="panel-tag">06</div>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <div class="loading">Loading data…</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>© NEXUS · 2026</div>
+      <div>Auto-refresh · 30s</div>
+    </footer>
+  </div>
+
+<script>
+/* ============================================================
+   CONFIG  — replace with your sheet ID
+============================================================ */
+const SHEET_ID = "1Xw1H4kgXRvvWJMYsFPxvAjJuBURFfm5YOazTPgeTp14";
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+const REFRESH_MS = 30000;
+
+/* ============================================================
+   STATE
+============================================================ */
+let allRows = [];
+let activePerf = "all";
+let activeCity = "all";
+let searchTerm = "";
+const charts = {};
+
+/* ============================================================
+   CUSTOM CURSOR
+============================================================ */
+(function cursor() {
+  const dot  = document.querySelector('.cursor-dot');
+  const ring = document.querySelector('.cursor-ring');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    dot.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`;
+  });
+
+  function loop() {
+    rx += (mx - rx) * 0.18;
+    ry += (my - ry) * 0.18;
+    ring.style.transform = `translate(${rx}px, ${ry}px) translate(-50%, -50%)`;
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // Hover state on interactive elements
+  const watch = () => {
+    document.querySelectorAll('[data-hover], button, input, a, td, tr').forEach(el => {
+      if (el._cursorBound) return;
+      el._cursorBound = true;
+      el.addEventListener('mouseenter', () => document.body.classList.add('is-hovering'));
+      el.addEventListener('mouseleave', () => document.body.classList.remove('is-hovering'));
+    });
+  };
+  watch();
+  // re-watch after dynamic table renders
+  window._rewatchCursor = watch;
+})();
+
+/* ============================================================
+   CHART.JS GLOBAL THEME
+============================================================ */
+Chart.defaults.color = '#b8b3a8';
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+const PALETTE = {
+  gold:     '#d4a857',
+  goldSoft: '#e8c98a',
+  crimson:  '#c9444a',
+  emerald:  '#5fa37e',
+  azure:    '#6fa3d2',
+  plum:     '#9a6cb0',
+};
+const PERF_COLORS = {
+  High:   PALETTE.emerald,
+  Medium: PALETTE.gold,
+  Low:    PALETTE.crimson,
+};
+
+/* ============================================================
+   FETCH GOOGLE SHEET
+============================================================ */
+async function fetchData() {
+  try {
+    const res = await fetch(SHEET_URL);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+
+    // header detection
+    const cols = json.table.cols.map(c => (c.label || '').trim().toLowerCase());
+    const idx = {
+      name:        cols.indexOf('name'),
+      score:       cols.indexOf('score'),
+      age:         cols.indexOf('age'),
+      city:        cols.indexOf('city'),
+      performance: cols.indexOf('performance'),
+    };
+
+    allRows = json.table.rows
+      .map(r => {
+        const cell = i => (i >= 0 && r.c[i] ? r.c[i].v : null);
+        const perfRaw = (cell(idx.performance) || '').toString().trim();
+        // normalize "Meduim" typo -> "Medium"
+        const perf = /^med/i.test(perfRaw) ? 'Medium'
+                  : /^hi/i.test(perfRaw)   ? 'High'
+                  : /^lo/i.test(perfRaw)   ? 'Low'
+                  : perfRaw;
+        return {
+          name:  cell(idx.name) || '—',
+          score: Number(cell(idx.score)) || 0,
+          age:   Number(cell(idx.age))   || 0,
+          city:  (cell(idx.city) || '').toString().trim(),
+          performance: perf,
+        };
+      })
+      .filter(r => r.name && r.name !== '—');
+
+    document.getElementById('lastSync').textContent =
+      'SYNC · ' + new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+    buildCityFilter();
+    render();
+  } catch (e) {
+    console.error('Fetch failed:', e);
+    document.getElementById('tableWrap').innerHTML =
+      '<div class="empty">Could not load sheet. Check sharing settings.</div>';
+  }
+}
+
+/* ============================================================
+   FILTER LOGIC
+============================================================ */
+function getFiltered() {
+  return allRows.filter(r => {
+    if (activePerf !== 'all' && r.performance !== activePerf) return false;
+    if (activeCity !== 'all' && r.city !== activeCity) return false;
+    if (searchTerm && !r.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function buildCityFilter() {
+  const wrap = document.getElementById('cityFilter');
+  const cities = [...new Set(allRows.map(r => r.city))].filter(Boolean).sort();
+  wrap.innerHTML = '<button class="chip active" data-city="all">All</button>' +
+    cities.map(c => `<button class="chip" data-city="${c}">${c}</button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeCity = btn.dataset.city;
+      render();
+    });
+  });
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+/* ============================================================
+   RENDER
+============================================================ */
+function render() {
+  const data = getFiltered();
+  renderKPIs(data);
+  renderBar(data);
+  renderRadar(data);
+  renderDoughnut(data);
+  renderBubble(data);
+  renderPolar(data);
+  renderTable(data);
+}
+
+/* ---- KPIs ---- */
+function renderKPIs(rows) {
+  const total   = rows.length;
+  const avg     = total ? (rows.reduce((s, r) => s + r.score, 0) / total) : 0;
+  const top     = total ? Math.max(...rows.map(r => r.score)) : 0;
+  const cities  = new Set(rows.map(r => r.city)).size;
+
+  const kpis = [
+    { label: 'Records',   value: total,   unit: '', trend: 'live count' },
+    { label: 'Avg Score', value: avg.toFixed(1), unit: 'pts', trend: 'mean across set' },
+    { label: 'Top Score', value: top, unit: 'pts', trend: 'peak performer' },
+    { label: 'Cities',    value: cities, unit: '', trend: 'geographic spread' },
+  ];
+
+  document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi" data-hover>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}<span class="unit">${k.unit}</span></div>
+      <div class="kpi-trend">— ${k.trend}</div>
+    </div>
+  `).join('');
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+/* ---- helpers ---- */
+function destroy(key) {
+  if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+}
+const tooltipStyle = {
+  backgroundColor: '#0a0a0c',
+  borderColor: 'rgba(212, 168, 87, 0.4)',
+  borderWidth: 1,
+  titleColor: '#d4a857',
+  bodyColor: '#f4f1ea',
+  titleFont: { family: "'JetBrains Mono', monospace", size: 11, weight: '500' },
+  bodyFont:  { family: "'Inter', sans-serif", size: 12 },
+  padding: 12,
+  cornerRadius: 6,
+  displayColors: false,
+};
+
+/* ---- 1. BAR ---- */
+function renderBar(rows) {
+  destroy('bar');
+  const ctx = document.getElementById('barChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 280);
+  grad.addColorStop(0, 'rgba(212, 168, 87, 0.85)');
+  grad.addColorStop(1, 'rgba(212, 168, 87, 0.15)');
+
+  charts.bar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [{
+        label: 'Score',
+        data: rows.map(r => r.score),
+        backgroundColor: grad,
+        borderColor: PALETTE.gold,
+        borderWidth: 1,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: tooltipStyle },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#b8b3a8' } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6e6a62' }, beginAtZero: true }
+      },
+      animation: { duration: 800, easing: 'easeOutQuart' },
+    }
+  });
+}
+
+/* ---- 2. RADAR ---- */
+function renderRadar(rows) {
+  destroy('radar');
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  charts.radar = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [
+        {
+          label: 'Score',
+          data: rows.map(r => r.score),
+          borderColor: PALETTE.gold,
+          backgroundColor: 'rgba(212, 168, 87, 0.18)',
+          pointBackgroundColor: PALETTE.gold,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+        {
+          label: 'Age',
+          data: rows.map(r => r.age),
+          borderColor: PALETTE.azure,
+          backgroundColor: 'rgba(111, 163, 210, 0.12)',
+          pointBackgroundColor: PALETTE.azure,
+          pointRadius: 3,
+          borderWidth: 1.5,
+          borderDash: [4, 4],
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#b8b3a8', boxWidth: 10, boxHeight: 10, padding: 14, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+        },
+        tooltip: tooltipStyle,
+      },
+      scales: {
+        r: {
+          angleLines: { color: 'rgba(255,255,255,0.08)' },
+          grid:       { color: 'rgba(255,255,255,0.06)' },
+          pointLabels: { color: '#b8b3a8', font: { size: 11 } },
+          ticks: { color: '#6e6a62', backdropColor: 'transparent', font: { size: 9 } },
+          suggestedMin: 0,
+        }
+      }
+    }
+  });
+}
+
+/* ---- 3. DOUGHNUT ---- */
+function renderDoughnut(rows) {
+  destroy('doughnut');
+  const counts = { High: 0, Medium: 0, Low: 0 };
+  rows.forEach(r => { if (counts[r.performance] !== undefined) counts[r.performance]++; });
+
+  const ctx = document.getElementById('doughnutChart').getContext('2d');
+  charts.doughnut = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(counts),
+      datasets: [{
+        data: Object.values(counts),
+        backgroundColor: [PALETTE.emerald, PALETTE.gold, PALETTE.crimson],
+        borderColor: '#16161a',
+        borderWidth: 3,
+        hoverOffset: 12,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '66%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#b8b3a8', boxWidth: 10, boxHeight: 10, padding: 14, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+        },
+        tooltip: tooltipStyle,
+      }
+    }
+  });
+}
+
+/* ---- 4. BUBBLE / SCATTER ---- */
+function renderBubble(rows) {
+  destroy('bubble');
+  const ctx = document.getElementById('bubbleChart').getContext('2d');
+  charts.bubble = new Chart(ctx, {
+    type: 'bubble',
+    data: {
+      datasets: rows.map(r => ({
+        label: r.name,
+        data: [{ x: r.age, y: r.score, r: Math.max(8, r.score / 6) }],
+        backgroundColor: (PERF_COLORS[r.performance] || PALETTE.gold) + '55',
+        borderColor: PERF_COLORS[r.performance] || PALETTE.gold,
+        borderWidth: 1.5,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#b8b3a8', boxWidth: 8, boxHeight: 8, padding: 10, font: { family: "'JetBrains Mono', monospace", size: 9 } }
+        },
+        tooltip: {
+          ...tooltipStyle,
+          callbacks: {
+            title: ctx => ctx[0].dataset.label,
+            label: ctx => `Age ${ctx.raw.x} · Score ${ctx.raw.y}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'AGE', color: '#6e6a62', font: { family: "'JetBrains Mono', monospace", size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6e6a62' }
+        },
+        y: {
+          title: { display: true, text: 'SCORE', color: '#6e6a62', font: { family: "'JetBrains Mono', monospace", size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6e6a62' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+/* ---- 5. POLAR AREA — score by city ---- */
+function renderPolar(rows) {
+  destroy('polar');
+  const cityMap = {};
+  rows.forEach(r => {
+    if (!r.city) return;
+    cityMap[r.city] = (cityMap[r.city] || 0) + r.score;
+  });
+  const labels = Object.keys(cityMap);
+  const values = Object.values(cityMap);
+
+  const ctx = document.getElementById('polarChart').getContext('2d');
+  charts.polar = new Chart(ctx, {
+    type: 'polarArea',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: [
+          'rgba(212, 168, 87, 0.55)',
+          'rgba(111, 163, 210, 0.55)',
+          'rgba(154, 108, 176, 0.55)',
+          'rgba(95, 163, 126, 0.55)',
+          'rgba(201, 68, 74, 0.55)',
+        ],
+        borderColor: '#16161a',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#b8b3a8', boxWidth: 10, boxHeight: 10, padding: 14, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+        },
+        tooltip: tooltipStyle,
+      },
+      scales: {
+        r: {
+          grid:  { color: 'rgba(255,255,255,0.06)' },
+          angleLines: { color: 'rgba(255,255,255,0.06)' },
+          ticks: { color: '#6e6a62', backdropColor: 'transparent', font: { size: 9 } },
+        }
+      }
+    }
+  });
+}
+
+/* ---- TABLE ---- */
+function renderTable(rows) {
+  const wrap = document.getElementById('tableWrap');
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty">No records match the current filters.</div>';
+    return;
+  }
+  const cls = p => p === 'High' ? 'high' : p === 'Low' ? 'low' : 'medium';
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Score</th><th>Age</th><th>City</th><th>Tier</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="name">${r.name}</td>
+            <td class="score">${r.score}</td>
+            <td>${r.age}</td>
+            <td>${r.city}</td>
+            <td><span class="badge ${cls(r.performance)}">${r.performance}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+/* ============================================================
+   FILTER EVENT LISTENERS
+============================================================ */
+document.getElementById('perfFilter').addEventListener('click', e => {
+  if (!e.target.matches('.chip')) return;
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  activePerf = e.target.dataset.perf;
+  render();
+});
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  render();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  activePerf = 'all'; activeCity = 'all'; searchTerm = '';
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.perf === 'all'));
+  document.querySelectorAll('#cityFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.city === 'all'));
+  document.getElementById('searchInput').value = '';
+  render();
+});
+
+/* ============================================================
+   INIT + AUTO REFRESH
+============================================================ */
+fetchData();
+setInterval(fetchData, REFRESH_MS);
+</script>
+</body>
+</html>
