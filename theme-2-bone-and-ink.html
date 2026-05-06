@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FIELDNOTES — Performance Atlas</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    --paper:    #f3efe6;
+    --paper-2:  #ebe6db;
+    --paper-3:  #e1dccf;
+    --ink:      #1a1816;
+    --ink-soft: #46423b;
+    --ink-mute: #7a766c;
+    --rule:     #1a1816;
+    --rule-soft:#c8c2b3;
+    --accent:   #c4452f;   /* vermilion */
+    --ochre:    #b58a3a;
+    --moss:     #5b6e3a;
+    --slate:    #46647a;
+    --plum:     #6f3e5e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    overflow-x: hidden;
+    cursor: none;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+  }
+
+  /* Paper texture */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.09 0 0 0 0 0.08 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* CUSTOM CURSOR — crosshair */
+  .cursor-cross {
+    position: fixed; top: 0; left: 0;
+    pointer-events: none; z-index: 9999;
+    width: 24px; height: 24px;
+    transform: translate(-50%, -50%);
+    will-change: transform;
+  }
+  .cursor-cross::before, .cursor-cross::after {
+    content: '';
+    position: absolute;
+    background: var(--ink);
+    transition: all 0.2s ease;
+  }
+  .cursor-cross::before {
+    left: 50%; top: 0; width: 1px; height: 100%;
+    transform: translateX(-50%);
+  }
+  .cursor-cross::after {
+    top: 50%; left: 0; height: 1px; width: 100%;
+    transform: translateY(-50%);
+  }
+  .cursor-circle {
+    position: fixed; top: 0; left: 0;
+    width: 8px; height: 8px;
+    pointer-events: none; z-index: 9999;
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.25s ease, height 0.25s ease, background 0.25s ease;
+    will-change: transform;
+  }
+  body.is-hovering .cursor-circle {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    border-color: var(--accent);
+    mix-blend-mode: multiply;
+  }
+  body.is-hovering .cursor-cross::before,
+  body.is-hovering .cursor-cross::after { opacity: 0; }
+
+  /* LAYOUT */
+  .app {
+    position: relative; z-index: 2;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 56px 80px;
+  }
+
+  /* HEADER — newspaper masthead */
+  header {
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 20px 0 16px;
+    margin-bottom: 32px;
+  }
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .masthead .live-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .pulse {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.3; transform: scale(0.7); }
+  }
+  .title-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-top: 1px solid var(--ink);
+    padding-top: 12px;
+  }
+  .brand-title {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 84px;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .brand-title em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .deck {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 16px;
+    color: var(--ink-soft);
+    max-width: 280px;
+    text-align: right;
+    line-height: 1.4;
+  }
+
+  /* FILTER BAR */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 14px 20px;
+    background: var(--paper-2);
+    border: 1px solid var(--ink);
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+  .filter-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+  }
+  .chip-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border: 1px solid var(--ink);
+    background: transparent;
+    color: var(--ink);
+    cursor: none;
+    transition: all 0.15s ease;
+  }
+  .chip:hover { background: var(--paper-3); }
+  .chip.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .filter-divider {
+    width: 1px; height: 24px;
+    background: var(--rule-soft);
+  }
+  .search-box {
+    flex: 1; min-width: 200px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 30px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    outline: none;
+    cursor: none;
+  }
+  .search-box input:focus { background: var(--paper-3); }
+  .search-box::before {
+    content: '⌕';
+    position: absolute; left: 10px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-mute);
+  }
+  .reset {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink);
+    background: none;
+    border: none;
+    cursor: none;
+    padding: 8px 12px;
+    text-transform: uppercase;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .reset:hover { color: var(--accent); }
+
+  /* KPI ROW */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 36px;
+  }
+  .kpi {
+    padding: 24px 28px;
+    border-right: 1px solid var(--rule-soft);
+    transition: background 0.2s ease;
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi:hover { background: var(--paper-2); }
+  .kpi-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .kpi-value {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .kpi-value .unit {
+    font-size: 18px;
+    color: var(--ink-mute);
+    margin-left: 4px;
+    font-style: italic;
+  }
+  .kpi-trend {
+    margin-top: 10px;
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  /* GRID */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 0;
+    border-left: 1px solid var(--rule-soft);
+    border-top: 1px solid var(--rule-soft);
+  }
+  .panel {
+    background: var(--paper);
+    border-right: 1px solid var(--rule-soft);
+    border-bottom: 1px solid var(--rule-soft);
+    padding: 24px 26px;
+    position: relative;
+  }
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .panel-title {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .panel-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .panel-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* spans */
+  .span-6 { grid-column: span 6; }
+  .span-4 { grid-column: span 4; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    font-weight: 500;
+    border-bottom: 1px solid var(--ink);
+  }
+  td {
+    padding: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+    color: var(--ink-soft);
+  }
+  tbody tr:hover td { background: var(--paper-2); color: var(--ink); }
+  td.name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 18px;
+    color: var(--ink);
+  }
+  td.score {
+    font-family: 'DM Mono', monospace;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+  }
+  .badge.high   { color: var(--moss); }
+  .badge.medium { color: var(--ochre); }
+  .badge.low    { color: var(--accent); }
+
+  .empty {
+    text-align: center; padding: 40px 0;
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    color: var(--ink-mute);
+    font-size: 18px;
+  }
+
+  /* Stagger entrance */
+  .panel, .kpi {
+    animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .kpi:nth-child(1) { animation-delay: 0.05s; }
+  .kpi:nth-child(2) { animation-delay: 0.10s; }
+  .kpi:nth-child(3) { animation-delay: 0.15s; }
+  .kpi:nth-child(4) { animation-delay: 0.20s; }
+  .panel:nth-child(1) { animation-delay: 0.25s; }
+  .panel:nth-child(2) { animation-delay: 0.32s; }
+  .panel:nth-child(3) { animation-delay: 0.39s; }
+  .panel:nth-child(4) { animation-delay: 0.46s; }
+  .panel:nth-child(5) { animation-delay: 0.53s; }
+  .panel:nth-child(6) { animation-delay: 0.60s; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .span-6, .span-4, .span-8 { grid-column: span 12; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .brand-title { font-size: 56px; }
+    .kpi:nth-child(2) { border-right: none; }
+    .kpi:nth-child(1), .kpi:nth-child(2) { border-bottom: 1px solid var(--rule-soft); }
+  }
+  @media (max-width: 600px) {
+    .app { padding: 24px 20px 60px; }
+    body { cursor: auto; }
+    .cursor-cross, .cursor-circle { display: none; }
+    .chip, .reset, .search-box input { cursor: pointer; }
+    .title-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .deck { text-align: left; }
+    .kpi-row { grid-template-columns: 1fr; }
+    .kpi { border-right: none; border-bottom: 1px solid var(--rule-soft); }
+    .kpi:last-child { border-bottom: none; }
+    .brand-title { font-size: 44px; }
+  }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 3px solid var(--ink);
+    display: flex; justify-content: space-between;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+</style>
+</head>
+
+<body>
+  <div class="cursor-cross"></div>
+  <div class="cursor-circle"></div>
+
+  <div class="app">
+    <header>
+      <div class="masthead">
+        <span>VOL. 01 · ISSUE 04 · MMXXVI</span>
+        <span class="live-tag"><span class="pulse"></span> LIVE FEED</span>
+        <span id="lastSync">SYNC · —</span>
+      </div>
+      <div class="title-row">
+        <h1 class="brand-title">Field<em>notes</em></h1>
+        <p class="deck">A weekly atlas of <em>performance, place, and people</em> — drawn from the source.</p>
+      </div>
+    </header>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar" data-hover>
+      <span class="filter-label">Tier</span>
+      <div class="chip-group" id="perfFilter">
+        <button class="chip active" data-perf="all">All</button>
+        <button class="chip" data-perf="High">High</button>
+        <button class="chip" data-perf="Medium">Medium</button>
+        <button class="chip" data-perf="Low">Low</button>
+      </div>
+      <div class="filter-divider"></div>
+      <span class="filter-label">City</span>
+      <div class="chip-group" id="cityFilter">
+        <button class="chip active" data-city="all">All</button>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="Search by name…" />
+      </div>
+      <button class="reset" id="resetBtn">↺ Reset</button>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="grid">
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Score Ledger</div>
+            <div class="panel-sub">Bar · Individual Performance</div>
+          </div>
+          <div class="panel-tag">№ 01</div>
+        </div>
+        <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Profile Radar</div>
+            <div class="panel-sub">Radar · Score & Age Composite</div>
+          </div>
+          <div class="panel-tag">№ 02</div>
+        </div>
+        <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+
+      <div class="panel span-4" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Tier Split</div>
+            <div class="panel-sub">Doughnut · Performance Bands</div>
+          </div>
+          <div class="panel-tag">№ 03</div>
+        </div>
+        <div class="chart-wrap"><canvas id="doughnutChart"></canvas></div>
+      </div>
+
+      <div class="panel span-8" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Age × Score Map</div>
+            <div class="panel-sub">Bubble · Correlation Field</div>
+          </div>
+          <div class="panel-tag">№ 04</div>
+        </div>
+        <div class="chart-wrap"><canvas id="bubbleChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Geographic Pulse</div>
+            <div class="panel-sub">Polar Area · Score by City</div>
+          </div>
+          <div class="panel-tag">№ 05</div>
+        </div>
+        <div class="chart-wrap"><canvas id="polarChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Roster</div>
+            <div class="panel-sub">Filtered Records</div>
+          </div>
+          <div class="panel-tag">№ 06</div>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>© FIELDNOTES · MMXXVI</div>
+      <div>Auto-refresh · 30s</div>
+    </footer>
+  </div>
+
+<script>
+const SHEET_ID = "1Xw1H4kgXRvvWJMYsFPxvAjJuBURFfm5YOazTPgeTp14";
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+const REFRESH_MS = 30000;
+
+let allRows = [];
+let activePerf = "all", activeCity = "all", searchTerm = "";
+const charts = {};
+
+/* CURSOR */
+(function cursor() {
+  const cross = document.querySelector('.cursor-cross');
+  const circ  = document.querySelector('.cursor-circle');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    cross.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`;
+  });
+  function loop() {
+    rx += (mx - rx) * 0.2;
+    ry += (my - ry) * 0.2;
+    circ.style.transform = `translate(${rx}px, ${ry}px) translate(-50%, -50%)`;
+    requestAnimationFrame(loop);
+  } loop();
+  const watch = () => {
+    document.querySelectorAll('[data-hover], button, input, td, tr').forEach(el => {
+      if (el._b) return; el._b = true;
+      el.addEventListener('mouseenter', () => document.body.classList.add('is-hovering'));
+      el.addEventListener('mouseleave', () => document.body.classList.remove('is-hovering'));
+    });
+  };
+  watch(); window._rewatchCursor = watch;
+})();
+
+/* CHART THEME */
+Chart.defaults.color = '#46423b';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = 'rgba(26,24,22,0.08)';
+
+const PALETTE = {
+  ink:    '#1a1816',
+  accent: '#c4452f',
+  ochre:  '#b58a3a',
+  moss:   '#5b6e3a',
+  slate:  '#46647a',
+  plum:   '#6f3e5e',
+};
+const PERF_COLORS = { High: PALETTE.moss, Medium: PALETTE.ochre, Low: PALETTE.accent };
+
+const tooltipStyle = {
+  backgroundColor: '#1a1816',
+  borderColor: '#c4452f',
+  borderWidth: 1,
+  titleColor: '#f3efe6',
+  bodyColor: '#f3efe6',
+  titleFont: { family: "'DM Mono', monospace", size: 11, weight: '500' },
+  bodyFont:  { family: "'DM Sans', sans-serif", size: 12 },
+  padding: 10, cornerRadius: 0, displayColors: false,
+};
+
+/* FETCH */
+async function fetchData() {
+  try {
+    const res = await fetch(SHEET_URL);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const cols = json.table.cols.map(c => (c.label || '').trim().toLowerCase());
+    const idx = {
+      name: cols.indexOf('name'), score: cols.indexOf('score'),
+      age:  cols.indexOf('age'),  city:  cols.indexOf('city'),
+      performance: cols.indexOf('performance'),
+    };
+    allRows = json.table.rows.map(r => {
+      const cell = i => (i >= 0 && r.c[i] ? r.c[i].v : null);
+      const perfRaw = (cell(idx.performance) || '').toString().trim();
+      const perf = /^med/i.test(perfRaw) ? 'Medium'
+                : /^hi/i.test(perfRaw)   ? 'High'
+                : /^lo/i.test(perfRaw)   ? 'Low' : perfRaw;
+      return {
+        name:  cell(idx.name) || '—',
+        score: Number(cell(idx.score)) || 0,
+        age:   Number(cell(idx.age))   || 0,
+        city:  (cell(idx.city) || '').toString().trim(),
+        performance: perf,
+      };
+    }).filter(r => r.name && r.name !== '—');
+    document.getElementById('lastSync').textContent =
+      'SYNC · ' + new Date().toLocaleTimeString('en-GB', { hour12: false });
+    buildCityFilter(); render();
+  } catch (e) {
+    document.getElementById('tableWrap').innerHTML =
+      '<div class="empty">Could not load sheet. Check sharing settings.</div>';
+  }
+}
+
+function getFiltered() {
+  return allRows.filter(r => {
+    if (activePerf !== 'all' && r.performance !== activePerf) return false;
+    if (activeCity !== 'all' && r.city !== activeCity) return false;
+    if (searchTerm && !r.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function buildCityFilter() {
+  const wrap = document.getElementById('cityFilter');
+  const cities = [...new Set(allRows.map(r => r.city))].filter(Boolean).sort();
+  wrap.innerHTML = '<button class="chip active" data-city="all">All</button>' +
+    cities.map(c => `<button class="chip" data-city="${c}">${c}</button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeCity = btn.dataset.city; render();
+    });
+  });
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+function render() {
+  const data = getFiltered();
+  renderKPIs(data); renderBar(data); renderRadar(data);
+  renderDoughnut(data); renderBubble(data); renderPolar(data); renderTable(data);
+}
+
+function renderKPIs(rows) {
+  const total = rows.length;
+  const avg   = total ? rows.reduce((s,r)=>s+r.score,0)/total : 0;
+  const top   = total ? Math.max(...rows.map(r=>r.score)) : 0;
+  const cities= new Set(rows.map(r=>r.city)).size;
+  const kpis = [
+    { label:'Records', value:total, unit:'', trend:'live count' },
+    { label:'Avg Score', value:avg.toFixed(1), unit:'pts', trend:'mean' },
+    { label:'Top Score', value:top, unit:'pts', trend:'peak' },
+    { label:'Cities', value:cities, unit:'', trend:'spread' },
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi" data-hover>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}<span class="unit">${k.unit}</span></div>
+      <div class="kpi-trend">— ${k.trend}</div>
+    </div>`).join('');
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+function destroy(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+
+function renderBar(rows) {
+  destroy('bar');
+  const ctx = document.getElementById('barChart').getContext('2d');
+  charts.bar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: rows.map(r=>r.name),
+      datasets: [{
+        label:'Score', data: rows.map(r=>r.score),
+        backgroundColor: PALETTE.ink, borderColor: PALETTE.ink,
+        borderWidth: 0, borderRadius: 0,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:tooltipStyle },
+      scales:{
+        x:{ grid:{display:false}, ticks:{color:'#46423b'} },
+        y:{ grid:{color:'rgba(26,24,22,0.06)'}, ticks:{color:'#7a766c'}, beginAtZero:true }
+      },
+      animation:{ duration:700 }
+    }
+  });
+}
+
+function renderRadar(rows) {
+  destroy('radar');
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  charts.radar = new Chart(ctx, {
+    type: 'radar',
+    data: { labels: rows.map(r=>r.name),
+      datasets: [
+        { label:'Score', data: rows.map(r=>r.score),
+          borderColor: PALETTE.accent, backgroundColor:'rgba(196,69,47,0.18)',
+          pointBackgroundColor: PALETTE.accent, pointRadius:4, borderWidth:2 },
+        { label:'Age', data: rows.map(r=>r.age),
+          borderColor: PALETTE.slate, backgroundColor:'rgba(70,100,122,0.10)',
+          pointBackgroundColor: PALETTE.slate, pointRadius:3, borderWidth:1.5, borderDash:[4,4] }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{ color:'#46423b', boxWidth:10, padding:14, font:{family:"'DM Mono', monospace", size:10} } },
+        tooltip:tooltipStyle
+      },
+      scales:{ r:{
+        angleLines:{color:'rgba(26,24,22,0.10)'}, grid:{color:'rgba(26,24,22,0.08)'},
+        pointLabels:{color:'#46423b', font:{size:11}},
+        ticks:{color:'#7a766c', backdropColor:'transparent', font:{size:9}}, suggestedMin:0
+      }}
+    }
+  });
+}
+
+function renderDoughnut(rows) {
+  destroy('doughnut');
+  const counts = { High:0, Medium:0, Low:0 };
+  rows.forEach(r => { if (counts[r.performance]!==undefined) counts[r.performance]++; });
+  const ctx = document.getElementById('doughnutChart').getContext('2d');
+  charts.doughnut = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:Object.keys(counts),
+      datasets:[{ data:Object.values(counts),
+        backgroundColor:[PALETTE.moss, PALETTE.ochre, PALETTE.accent],
+        borderColor:'#f3efe6', borderWidth:3, hoverOffset:10 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{ legend:{position:'bottom', labels:{color:'#46423b', boxWidth:10, padding:14, font:{family:"'DM Mono', monospace", size:10}}},
+        tooltip:tooltipStyle }
+    }
+  });
+}
+
+function renderBubble(rows) {
+  destroy('bubble');
+  const ctx = document.getElementById('bubbleChart').getContext('2d');
+  charts.bubble = new Chart(ctx, {
+    type:'bubble',
+    data:{ datasets: rows.map(r => ({
+      label: r.name,
+      data:[{x:r.age, y:r.score, r:Math.max(8, r.score/6)}],
+      backgroundColor: (PERF_COLORS[r.performance]||PALETTE.ink) + '66',
+      borderColor: PERF_COLORS[r.performance]||PALETTE.ink, borderWidth:1.5,
+    }))},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom', labels:{color:'#46423b', boxWidth:8, padding:10, font:{family:"'DM Mono', monospace", size:9}}},
+        tooltip:{ ...tooltipStyle, callbacks:{
+          title: c=>c[0].dataset.label,
+          label: c=>`Age ${c.raw.x} · Score ${c.raw.y}`
+        }}
+      },
+      scales:{
+        x:{ title:{display:true, text:'AGE', color:'#7a766c', font:{family:"'DM Mono', monospace", size:10}},
+            grid:{color:'rgba(26,24,22,0.06)'}, ticks:{color:'#7a766c'} },
+        y:{ title:{display:true, text:'SCORE', color:'#7a766c', font:{family:"'DM Mono', monospace", size:10}},
+            grid:{color:'rgba(26,24,22,0.06)'}, ticks:{color:'#7a766c'}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function renderPolar(rows) {
+  destroy('polar');
+  const cityMap = {};
+  rows.forEach(r => { if (r.city) cityMap[r.city] = (cityMap[r.city]||0) + r.score; });
+  const ctx = document.getElementById('polarChart').getContext('2d');
+  charts.polar = new Chart(ctx, {
+    type:'polarArea',
+    data:{ labels:Object.keys(cityMap),
+      datasets:[{ data:Object.values(cityMap),
+        backgroundColor:[
+          'rgba(196,69,47,0.55)', 'rgba(70,100,122,0.55)',
+          'rgba(111,62,94,0.55)', 'rgba(91,110,58,0.55)',
+          'rgba(181,138,58,0.55)'
+        ],
+        borderColor:'#f3efe6', borderWidth:2 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:'#46423b', boxWidth:10, padding:14, font:{family:"'DM Mono', monospace", size:10}}},
+        tooltip:tooltipStyle },
+      scales:{ r:{ grid:{color:'rgba(26,24,22,0.08)'}, angleLines:{color:'rgba(26,24,22,0.08)'},
+        ticks:{color:'#7a766c', backdropColor:'transparent', font:{size:9}} }}
+    }
+  });
+}
+
+function renderTable(rows) {
+  const wrap = document.getElementById('tableWrap');
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">No records match.</div>'; return; }
+  const cls = p => p==='High'?'high':p==='Low'?'low':'medium';
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>Name</th><th>Score</th><th>Age</th><th>City</th><th>Tier</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td class="name">${r.name}</td>
+          <td class="score">${r.score}</td>
+          <td>${r.age}</td>
+          <td>${r.city}</td>
+          <td><span class="badge ${cls(r.performance)}">${r.performance}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+document.getElementById('perfFilter').addEventListener('click', e => {
+  if (!e.target.matches('.chip')) return;
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  activePerf = e.target.dataset.perf; render();
+});
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value; render();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  activePerf='all'; activeCity='all'; searchTerm='';
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.perf==='all'));
+  document.querySelectorAll('#cityFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.city==='all'));
+  document.getElementById('searchInput').value=''; render();
+});
+
+fetchData();
+setInterval(fetchData, REFRESH_MS);
+</script>
+</body>
+</html>

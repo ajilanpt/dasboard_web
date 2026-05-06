@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SYS//PULSE — Performance Terminal</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Grotesk:wght@300;400;500;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    --bg-0: #0d0221;
+    --bg-1: #1a0738;
+    --bg-2: #240e4a;
+    --bg-3: #2d1454;
+    --line: rgba(255, 0, 230, 0.15);
+    --line-strong: rgba(255, 0, 230, 0.35);
+    --text-0: #f0e9ff;
+    --text-1: #b39ddb;
+    --text-2: #6e5a9a;
+    --magenta: #ff2bd6;
+    --cyan:    #00f0ff;
+    --lime:    #b3ff00;
+    --orange:  #ff7a18;
+    --violet:  #8b5cf6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg-0);
+    color: var(--text-0);
+    overflow-x: hidden;
+    cursor: none;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+  }
+
+  /* Sun-grid background */
+  .grid-bg {
+    position: fixed; inset: 0;
+    z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba(255, 43, 214, 0.25), transparent 55%),
+      radial-gradient(ellipse at 50% 0%,   rgba(0, 240, 255, 0.18),  transparent 60%),
+      linear-gradient(180deg, var(--bg-0) 0%, #1a0738 100%);
+  }
+  /* perspective grid */
+  .grid-bg::after {
+    content: '';
+    position: absolute;
+    bottom: -30%; left: -50%;
+    width: 200%; height: 70%;
+    background-image:
+      linear-gradient(to right, rgba(255, 43, 214, 0.20) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 240, 255, 0.15) 1px, transparent 1px);
+    background-size: 60px 60px;
+    transform: perspective(400px) rotateX(60deg);
+    transform-origin: 50% 0;
+    mask-image: linear-gradient(to bottom, transparent, black 40%);
+  }
+
+  /* CRT scanlines */
+  body::before {
+    content:''; position:fixed; inset:0; z-index:1; pointer-events:none;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.18) 3px,
+      rgba(0,0,0,0.18) 3px
+    );
+    opacity: 0.4;
+  }
+  /* faint flicker */
+  body::after {
+    content:''; position:fixed; inset:0; z-index:2; pointer-events:none;
+    background: rgba(255, 43, 214, 0.015);
+    animation: flicker 0.15s infinite;
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 0; }
+    50%      { opacity: 1; }
+  }
+
+  /* CUSTOM CURSOR — neon target reticle */
+  .cursor-core {
+    position: fixed; top:0; left:0;
+    width: 4px; height: 4px;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan);
+    border-radius: 50%;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%, -50%);
+    will-change: transform;
+  }
+  .cursor-reticle {
+    position: fixed; top:0; left:0;
+    width: 40px; height: 40px;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%, -50%);
+    will-change: transform;
+    transition: width 0.25s, height 0.25s;
+  }
+  .cursor-reticle::before, .cursor-reticle::after {
+    content:''; position:absolute;
+    background: var(--magenta);
+    box-shadow: 0 0 8px var(--magenta);
+    transition: all 0.25s;
+  }
+  .cursor-reticle::before {
+    left: 50%; top: 0; width: 1px; height: 100%;
+    transform: translateX(-50%);
+  }
+  .cursor-reticle::after {
+    top: 50%; left: 0; height: 1px; width: 100%;
+    transform: translateY(-50%);
+  }
+  body.is-hovering .cursor-reticle {
+    width: 80px; height: 80px;
+  }
+  body.is-hovering .cursor-reticle::before,
+  body.is-hovering .cursor-reticle::after {
+    background: var(--cyan);
+    box-shadow: 0 0 12px var(--cyan);
+  }
+  body.is-hovering .cursor-core {
+    background: var(--magenta);
+    box-shadow: 0 0 14px var(--magenta), 0 0 28px var(--magenta);
+  }
+
+  /* LAYOUT */
+  .app {
+    position: relative; z-index: 3;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 36px 48px 80px;
+  }
+
+  /* HEADER — terminal */
+  header {
+    border: 1px solid var(--line-strong);
+    background: rgba(13, 2, 33, 0.6);
+    backdrop-filter: blur(8px);
+    padding: 18px 24px;
+    margin-bottom: 32px;
+    position: relative;
+  }
+  header::before {
+    content: '◉ ◉ ◉';
+    position: absolute; top: 8px; left: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--magenta);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    opacity: 0.6;
+  }
+  .term-bar {
+    margin-top: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .brand-mark {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.4em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+  }
+  .brand-title {
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    font-size: 80px;
+    line-height: 0.95;
+    letter-spacing: 0.02em;
+    color: var(--text-0);
+    text-shadow:
+      0 0 10px rgba(255, 43, 214, 0.6),
+      0 0 30px rgba(255, 43, 214, 0.3);
+  }
+  .brand-title em {
+    font-style: normal;
+    color: var(--cyan);
+    text-shadow:
+      0 0 10px rgba(0, 240, 255, 0.7),
+      0 0 30px rgba(0, 240, 255, 0.3);
+  }
+  .meta {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-1);
+    line-height: 1.8;
+  }
+  .live {
+    color: var(--lime);
+    display: inline-flex; align-items: center; gap: 6px;
+    text-shadow: 0 0 6px rgba(179, 255, 0, 0.6);
+  }
+  .pulse {
+    width: 7px; height: 7px;
+    background: var(--lime);
+    box-shadow: 0 0 10px var(--lime);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%     { opacity:0.4; transform:scale(0.6); }
+  }
+
+  /* FILTER BAR */
+  .filter-bar {
+    display: flex; align-items: center; gap: 22px;
+    padding: 16px 22px;
+    background: rgba(36, 14, 74, 0.5);
+    border: 1px solid var(--line-strong);
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+    backdrop-filter: blur(6px);
+  }
+  .filter-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+  }
+  .filter-label::before { content: '> '; opacity: 0.6; }
+  .chip-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text-1);
+    cursor: none;
+    transition: all 0.2s ease;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .chip:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  }
+  .chip.active {
+    background: var(--magenta);
+    border-color: var(--magenta);
+    color: var(--bg-0);
+    box-shadow: 0 0 16px rgba(255, 43, 214, 0.6);
+    text-shadow: none;
+  }
+  .filter-divider {
+    width: 1px; height: 24px;
+    background: var(--line-strong);
+  }
+  .search-box {
+    flex: 1; min-width: 220px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 32px;
+    background: var(--bg-0);
+    border: 1px solid var(--line-strong);
+    color: var(--cyan);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    cursor: none;
+    letter-spacing: 0.05em;
+  }
+  .search-box input:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  }
+  .search-box::before {
+    content: '$';
+    position: absolute; left: 12px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--magenta);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+  .reset {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--orange);
+    background: none;
+    border: 1px solid var(--orange);
+    cursor: none;
+    padding: 7px 14px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .reset:hover {
+    background: var(--orange);
+    color: var(--bg-0);
+    box-shadow: 0 0 14px rgba(255, 122, 24, 0.5);
+  }
+
+  /* KPI ROW */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+  .kpi {
+    background: rgba(26, 7, 56, 0.6);
+    border: 1px solid var(--line-strong);
+    padding: 22px;
+    position: relative;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(6px);
+  }
+  .kpi:hover {
+    border-color: var(--magenta);
+    box-shadow: 0 0 20px rgba(255, 43, 214, 0.3);
+    transform: translateY(-2px);
+  }
+  .kpi::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px;
+    width: 14px; height: 14px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+  }
+  .kpi::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 14px; height: 14px;
+    border-bottom: 2px solid var(--magenta);
+    border-right: 2px solid var(--magenta);
+  }
+  .kpi-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .kpi-value {
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 0.9;
+    color: var(--text-0);
+    text-shadow:
+      0 0 8px rgba(255, 43, 214, 0.5),
+      0 0 20px rgba(255, 43, 214, 0.2);
+  }
+  .kpi-value .unit {
+    font-size: 22px;
+    color: var(--magenta);
+    margin-left: 4px;
+  }
+  .kpi-trend {
+    margin-top: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--lime);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* GRID */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 18px;
+  }
+  .panel {
+    background: rgba(26, 7, 56, 0.55);
+    border: 1px solid var(--line-strong);
+    padding: 24px 26px;
+    position: relative;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.3s ease;
+  }
+  .panel:hover { border-color: var(--magenta); }
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px;
+    width: 18px; height: 18px;
+    border-top: 2px solid var(--magenta);
+    border-left: 2px solid var(--magenta);
+  }
+  .panel::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 18px; height: 18px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+  }
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .panel-title {
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    font-size: 28px;
+    color: var(--text-0);
+    text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+  }
+  .panel-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-2);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .panel-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--magenta);
+    border: 1px solid var(--magenta);
+    padding: 3px 10px;
+    letter-spacing: 0.1em;
+    text-shadow: 0 0 6px rgba(255, 43, 214, 0.5);
+  }
+  .chart-wrap { position: relative; height: 280px; }
+
+  .span-6 { grid-column: span 6; }
+  .span-4 { grid-column: span 4; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left;
+    padding: 12px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    font-weight: 500;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  td {
+    padding: 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-1);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  tbody tr:hover td {
+    background: rgba(255, 43, 214, 0.06);
+    color: var(--text-0);
+  }
+  td.name {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--magenta);
+    text-shadow: 0 0 6px rgba(255, 43, 214, 0.4);
+  }
+  td.score {
+    color: var(--cyan);
+    font-weight: 600;
+    text-shadow: 0 0 4px rgba(0, 240, 255, 0.3);
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+  }
+  .badge.high   { color: var(--lime);    box-shadow: 0 0 8px rgba(179,255,0,0.3); }
+  .badge.medium { color: var(--orange);  box-shadow: 0 0 8px rgba(255,122,24,0.3); }
+  .badge.low    { color: var(--magenta); box-shadow: 0 0 8px rgba(255,43,214,0.3); }
+
+  .empty {
+    text-align: center; padding: 50px 0;
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    color: var(--text-2);
+  }
+
+  /* Stagger entrance */
+  .panel, .kpi {
+    animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .kpi:nth-child(1) { animation-delay: 0.05s; }
+  .kpi:nth-child(2) { animation-delay: 0.10s; }
+  .kpi:nth-child(3) { animation-delay: 0.15s; }
+  .kpi:nth-child(4) { animation-delay: 0.20s; }
+  .panel:nth-child(1) { animation-delay: 0.25s; }
+  .panel:nth-child(2) { animation-delay: 0.32s; }
+  .panel:nth-child(3) { animation-delay: 0.39s; }
+  .panel:nth-child(4) { animation-delay: 0.46s; }
+  .panel:nth-child(5) { animation-delay: 0.53s; }
+  .panel:nth-child(6) { animation-delay: 0.60s; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 1100px) {
+    .span-6, .span-4, .span-8 { grid-column: span 12; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .brand-title { font-size: 56px; }
+  }
+  @media (max-width: 600px) {
+    .app { padding: 24px 20px 60px; }
+    body { cursor: auto; }
+    .cursor-core, .cursor-reticle { display: none; }
+    .chip, .reset, .search-box input { cursor: pointer; }
+    .term-bar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .meta { text-align: left; }
+    .kpi-row { grid-template-columns: 1fr; }
+    .brand-title { font-size: 44px; }
+  }
+
+  footer {
+    margin-top: 48px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--line-strong);
+    border-bottom: 1px solid var(--line-strong);
+    display: flex; justify-content: space-between;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  footer span:first-child { color: var(--magenta); }
+</style>
+</head>
+
+<body>
+  <div class="grid-bg"></div>
+  <div class="cursor-reticle"></div>
+  <div class="cursor-core"></div>
+
+  <div class="app">
+    <header>
+      <div class="brand-mark">SYS://PULSE.TERMINAL — v2.6.4</div>
+      <div class="term-bar">
+        <h1 class="brand-title">PERF<em>.SCAN</em></h1>
+        <div class="meta">
+          <div><span class="live"><span class="pulse"></span> ONLINE</span></div>
+          <div id="lastSync">SYNC : —</div>
+          <div>SRC : SHEETS://API</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="filter-bar" data-hover>
+      <span class="filter-label">tier</span>
+      <div class="chip-group" id="perfFilter">
+        <button class="chip active" data-perf="all">All</button>
+        <button class="chip" data-perf="High">High</button>
+        <button class="chip" data-perf="Medium">Medium</button>
+        <button class="chip" data-perf="Low">Low</button>
+      </div>
+      <div class="filter-divider"></div>
+      <span class="filter-label">city</span>
+      <div class="chip-group" id="cityFilter">
+        <button class="chip active" data-city="all">All</button>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="grep_name…" />
+      </div>
+      <button class="reset" id="resetBtn">↺ Reset</button>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="grid">
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">SCORE_LEDGER</div>
+            <div class="panel-sub">Bar · Individual</div>
+          </div>
+          <div class="panel-tag">[01]</div>
+        </div>
+        <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">PROFILE_RADAR</div>
+            <div class="panel-sub">Radar · Score & Age</div>
+          </div>
+          <div class="panel-tag">[02]</div>
+        </div>
+        <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+
+      <div class="panel span-4" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">TIER_SPLIT</div>
+            <div class="panel-sub">Doughnut · Bands</div>
+          </div>
+          <div class="panel-tag">[03]</div>
+        </div>
+        <div class="chart-wrap"><canvas id="doughnutChart"></canvas></div>
+      </div>
+
+      <div class="panel span-8" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">AGE_x_SCORE</div>
+            <div class="panel-sub">Bubble · Correlation Field</div>
+          </div>
+          <div class="panel-tag">[04]</div>
+        </div>
+        <div class="chart-wrap"><canvas id="bubbleChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">GEO_PULSE</div>
+            <div class="panel-sub">Polar · Score by City</div>
+          </div>
+          <div class="panel-tag">[05]</div>
+        </div>
+        <div class="chart-wrap"><canvas id="polarChart"></canvas></div>
+      </div>
+
+      <div class="panel span-6" data-hover>
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">ROSTER_DUMP</div>
+            <div class="panel-sub">Filtered Records</div>
+          </div>
+          <div class="panel-tag">[06]</div>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <div class="empty">> Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span>© SYS//PULSE 2026</span>
+      <span>AUTO-REFRESH : 30S</span>
+    </footer>
+  </div>
+
+<script>
+const SHEET_ID = "1Xw1H4kgXRvvWJMYsFPxvAjJuBURFfm5YOazTPgeTp14";
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+const REFRESH_MS = 30000;
+
+let allRows = [];
+let activePerf = "all", activeCity = "all", searchTerm = "";
+const charts = {};
+
+/* CURSOR */
+(function cursor() {
+  const core = document.querySelector('.cursor-core');
+  const ret  = document.querySelector('.cursor-reticle');
+  let mx=0, my=0, rx=0, ry=0;
+  document.addEventListener('mousemove', e => {
+    mx=e.clientX; my=e.clientY;
+    core.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`;
+  });
+  function loop() {
+    rx += (mx-rx)*0.18; ry += (my-ry)*0.18;
+    ret.style.transform = `translate(${rx}px, ${ry}px) translate(-50%, -50%)`;
+    requestAnimationFrame(loop);
+  } loop();
+  const watch = () => {
+    document.querySelectorAll('[data-hover], button, input, td, tr').forEach(el => {
+      if (el._b) return; el._b = true;
+      el.addEventListener('mouseenter', () => document.body.classList.add('is-hovering'));
+      el.addEventListener('mouseleave', () => document.body.classList.remove('is-hovering'));
+    });
+  };
+  watch(); window._rewatchCursor = watch;
+})();
+
+/* CHART THEME */
+Chart.defaults.color = '#b39ddb';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 10;
+Chart.defaults.borderColor = 'rgba(255, 43, 214, 0.15)';
+
+const PALETTE = {
+  magenta:'#ff2bd6', cyan:'#00f0ff', lime:'#b3ff00',
+  orange:'#ff7a18', violet:'#8b5cf6',
+};
+const PERF_COLORS = { High:PALETTE.lime, Medium:PALETTE.orange, Low:PALETTE.magenta };
+
+const tooltipStyle = {
+  backgroundColor: '#0d0221',
+  borderColor: '#ff2bd6',
+  borderWidth: 1,
+  titleColor: '#00f0ff',
+  bodyColor: '#f0e9ff',
+  titleFont: { family: "'IBM Plex Mono', monospace", size: 11, weight: '500' },
+  bodyFont:  { family: "'IBM Plex Mono', monospace", size: 11 },
+  padding: 10, cornerRadius: 0, displayColors: false,
+};
+
+async function fetchData() {
+  try {
+    const res = await fetch(SHEET_URL);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const cols = json.table.cols.map(c => (c.label || '').trim().toLowerCase());
+    const idx = {
+      name: cols.indexOf('name'), score: cols.indexOf('score'),
+      age:  cols.indexOf('age'),  city:  cols.indexOf('city'),
+      performance: cols.indexOf('performance'),
+    };
+    allRows = json.table.rows.map(r => {
+      const cell = i => (i >= 0 && r.c[i] ? r.c[i].v : null);
+      const perfRaw = (cell(idx.performance) || '').toString().trim();
+      const perf = /^med/i.test(perfRaw) ? 'Medium'
+                : /^hi/i.test(perfRaw)   ? 'High'
+                : /^lo/i.test(perfRaw)   ? 'Low' : perfRaw;
+      return {
+        name:  cell(idx.name) || '—',
+        score: Number(cell(idx.score)) || 0,
+        age:   Number(cell(idx.age))   || 0,
+        city:  (cell(idx.city) || '').toString().trim(),
+        performance: perf,
+      };
+    }).filter(r => r.name && r.name !== '—');
+    document.getElementById('lastSync').textContent =
+      'SYNC : ' + new Date().toLocaleTimeString('en-GB', { hour12: false });
+    buildCityFilter(); render();
+  } catch (e) {
+    document.getElementById('tableWrap').innerHTML =
+      '<div class="empty">> ERROR: ACCESS DENIED</div>';
+  }
+}
+
+function getFiltered() {
+  return allRows.filter(r => {
+    if (activePerf !== 'all' && r.performance !== activePerf) return false;
+    if (activeCity !== 'all' && r.city !== activeCity) return false;
+    if (searchTerm && !r.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function buildCityFilter() {
+  const wrap = document.getElementById('cityFilter');
+  const cities = [...new Set(allRows.map(r => r.city))].filter(Boolean).sort();
+  wrap.innerHTML = '<button class="chip active" data-city="all">All</button>' +
+    cities.map(c => `<button class="chip" data-city="${c}">${c}</button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeCity = btn.dataset.city; render();
+    });
+  });
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+function render() {
+  const data = getFiltered();
+  renderKPIs(data); renderBar(data); renderRadar(data);
+  renderDoughnut(data); renderBubble(data); renderPolar(data); renderTable(data);
+}
+
+function renderKPIs(rows) {
+  const total = rows.length;
+  const avg   = total ? rows.reduce((s,r)=>s+r.score,0)/total : 0;
+  const top   = total ? Math.max(...rows.map(r=>r.score)) : 0;
+  const cities= new Set(rows.map(r=>r.city)).size;
+  const kpis = [
+    { label:'Records', value:total, unit:'', trend:'>> live' },
+    { label:'Avg Score', value:avg.toFixed(1), unit:'pts', trend:'>> mean' },
+    { label:'Top Score', value:top, unit:'pts', trend:'>> peak' },
+    { label:'Cities', value:cities, unit:'', trend:'>> nodes' },
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi" data-hover>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}<span class="unit">${k.unit}</span></div>
+      <div class="kpi-trend">${k.trend}</div>
+    </div>`).join('');
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+function destroy(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+
+function renderBar(rows) {
+  destroy('bar');
+  const ctx = document.getElementById('barChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,280);
+  grad.addColorStop(0, 'rgba(255,43,214,0.85)');
+  grad.addColorStop(1, 'rgba(0,240,255,0.3)');
+  charts.bar = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:rows.map(r=>r.name),
+      datasets:[{
+        data:rows.map(r=>r.score),
+        backgroundColor:grad, borderColor:PALETTE.cyan,
+        borderWidth:1.5, borderRadius:0,
+      }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:tooltipStyle },
+      scales:{
+        x:{ grid:{display:false}, ticks:{color:'#b39ddb'} },
+        y:{ grid:{color:'rgba(255,43,214,0.08)'}, ticks:{color:'#6e5a9a'}, beginAtZero:true }
+      },
+      animation:{ duration:800 }
+    }
+  });
+}
+
+function renderRadar(rows) {
+  destroy('radar');
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  charts.radar = new Chart(ctx, {
+    type:'radar',
+    data:{ labels:rows.map(r=>r.name),
+      datasets:[
+        { label:'Score', data:rows.map(r=>r.score),
+          borderColor:PALETTE.magenta, backgroundColor:'rgba(255,43,214,0.18)',
+          pointBackgroundColor:PALETTE.magenta, pointRadius:4, borderWidth:2 },
+        { label:'Age', data:rows.map(r=>r.age),
+          borderColor:PALETTE.cyan, backgroundColor:'rgba(0,240,255,0.10)',
+          pointBackgroundColor:PALETTE.cyan, pointRadius:3, borderWidth:1.5, borderDash:[4,4] }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:'#b39ddb', boxWidth:10, padding:14, font:{family:"'IBM Plex Mono', monospace", size:10}}},
+        tooltip:tooltipStyle },
+      scales:{ r:{
+        angleLines:{color:'rgba(255,43,214,0.15)'}, grid:{color:'rgba(0,240,255,0.10)'},
+        pointLabels:{color:'#b39ddb', font:{size:11}},
+        ticks:{color:'#6e5a9a', backdropColor:'transparent', font:{size:9}}, suggestedMin:0
+      }}
+    }
+  });
+}
+
+function renderDoughnut(rows) {
+  destroy('doughnut');
+  const counts = { High:0, Medium:0, Low:0 };
+  rows.forEach(r => { if (counts[r.performance]!==undefined) counts[r.performance]++; });
+  const ctx = document.getElementById('doughnutChart').getContext('2d');
+  charts.doughnut = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:Object.keys(counts),
+      datasets:[{ data:Object.values(counts),
+        backgroundColor:[PALETTE.lime, PALETTE.orange, PALETTE.magenta],
+        borderColor:'#0d0221', borderWidth:3, hoverOffset:12 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{ legend:{position:'bottom', labels:{color:'#b39ddb', boxWidth:10, padding:14, font:{family:"'IBM Plex Mono', monospace", size:10}}},
+        tooltip:tooltipStyle }
+    }
+  });
+}
+
+function renderBubble(rows) {
+  destroy('bubble');
+  const ctx = document.getElementById('bubbleChart').getContext('2d');
+  charts.bubble = new Chart(ctx, {
+    type:'bubble',
+    data:{ datasets:rows.map(r => ({
+      label:r.name,
+      data:[{x:r.age, y:r.score, r:Math.max(8, r.score/6)}],
+      backgroundColor:(PERF_COLORS[r.performance]||PALETTE.cyan) + '55',
+      borderColor:PERF_COLORS[r.performance]||PALETTE.cyan, borderWidth:1.5,
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom', labels:{color:'#b39ddb', boxWidth:8, padding:10, font:{family:"'IBM Plex Mono', monospace", size:9}}},
+        tooltip:{ ...tooltipStyle, callbacks:{
+          title: c=>c[0].dataset.label,
+          label: c=>`AGE ${c.raw.x} :: SCORE ${c.raw.y}`
+        }}
+      },
+      scales:{
+        x:{ title:{display:true, text:'AGE', color:'#00f0ff', font:{family:"'IBM Plex Mono', monospace", size:10}},
+            grid:{color:'rgba(255,43,214,0.06)'}, ticks:{color:'#6e5a9a'} },
+        y:{ title:{display:true, text:'SCORE', color:'#00f0ff', font:{family:"'IBM Plex Mono', monospace", size:10}},
+            grid:{color:'rgba(255,43,214,0.06)'}, ticks:{color:'#6e5a9a'}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function renderPolar(rows) {
+  destroy('polar');
+  const cityMap = {};
+  rows.forEach(r => { if (r.city) cityMap[r.city] = (cityMap[r.city]||0) + r.score; });
+  const ctx = document.getElementById('polarChart').getContext('2d');
+  charts.polar = new Chart(ctx, {
+    type:'polarArea',
+    data:{ labels:Object.keys(cityMap),
+      datasets:[{ data:Object.values(cityMap),
+        backgroundColor:[
+          'rgba(255,43,214,0.55)', 'rgba(0,240,255,0.55)',
+          'rgba(179,255,0,0.55)',  'rgba(255,122,24,0.55)',
+          'rgba(139,92,246,0.55)'
+        ],
+        borderColor:'#0d0221', borderWidth:2 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:'#b39ddb', boxWidth:10, padding:14, font:{family:"'IBM Plex Mono', monospace", size:10}}},
+        tooltip:tooltipStyle },
+      scales:{ r:{ grid:{color:'rgba(0,240,255,0.10)'}, angleLines:{color:'rgba(255,43,214,0.10)'},
+        ticks:{color:'#6e5a9a', backdropColor:'transparent', font:{size:9}} }}
+    }
+  });
+}
+
+function renderTable(rows) {
+  const wrap = document.getElementById('tableWrap');
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">> NO RECORDS</div>'; return; }
+  const cls = p => p==='High'?'high':p==='Low'?'low':'medium';
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>Name</th><th>Score</th><th>Age</th><th>City</th><th>Tier</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td class="name">${r.name}</td>
+          <td class="score">${r.score}</td>
+          <td>${r.age}</td>
+          <td>${r.city}</td>
+          <td><span class="badge ${cls(r.performance)}">${r.performance}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  if (window._rewatchCursor) window._rewatchCursor();
+}
+
+document.getElementById('perfFilter').addEventListener('click', e => {
+  if (!e.target.matches('.chip')) return;
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  activePerf = e.target.dataset.perf; render();
+});
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value; render();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  activePerf='all'; activeCity='all'; searchTerm='';
+  document.querySelectorAll('#perfFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.perf==='all'));
+  document.querySelectorAll('#cityFilter .chip').forEach(b => b.classList.toggle('active', b.dataset.city==='all'));
+  document.getElementById('searchInput').value=''; render();
+});
+
+fetchData();
+setInterval(fetchData, REFRESH_MS);
+</script>
+</body>
+</html>
