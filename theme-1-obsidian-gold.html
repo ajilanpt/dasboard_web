@@ -491,6 +491,19 @@
 </head>
 
 <body>
+  <script>
+(function() {
+  const PASSWORD = "yourPasswordHere";
+  if (sessionStorage.getItem("authed") !== "yes") {
+    const entered = prompt("Enter password:");
+    if (entered !== PASSWORD) {
+      document.body.innerHTML = "<p style='color:#fff;text-align:center;margin-top:40vh;font-family:sans-serif'>Access denied</p>";
+      throw new Error("blocked");
+    }
+    sessionStorage.setItem("authed", "yes");
+  }
+})();
+</script>
   <div class="mesh"></div>
   <div class="cursor-ring"></div>
   <div class="cursor-dot"></div>
